@@ -1,0 +1,28 @@
+{
+  "name": "gabarita-ti",
+  "private": true,
+  "packageManager": "pnpm@11.22.0",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @gabarita/shared build && pnpm --parallel --filter @gabarita/api --filter @gabarita/web dev",
+    "build": "pnpm -r build",
+    "test": "pnpm --filter @gabarita/shared build && pnpm -r test",
+    "lint": "pnpm --filter @gabarita/shared build && eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "db:up": "docker compose up -d db",
+    "db:migrate": "pnpm --filter @gabarita/api prisma:migrate"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "eslint": "^10.12.0",
+    "eslint-config-next": "^16.4.0",
+    "eslint-config-prettier": "^10.1.0",
+    "globals": "^17.0.0",
+    "prettier": "^3.6.0",
+    "prettier-plugin-tailwindcss": "^0.7.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.1"
+  }
+}

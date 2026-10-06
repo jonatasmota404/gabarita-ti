@@ -1,0 +1,28 @@
+# Ambiente local. Um único Postgres com:
+#  - gabarita        banco do app (usuários e respostas; migrações Prisma)
+#  - gabarita_test   banco do app para os testes de integração
+#  - ingest_dev      fixture com as views v_questao_* do contrato e questões de exemplo,
+#                    lida pelo role somente leitura app_leitor (como no ingest real)
+# As senhas abaixo são só para desenvolvimento local; troque via .env se quiser.
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-gabarita}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gabarita}
+      POSTGRES_DB: gabarita
+      APP_LEITOR_SENHA: ${APP_LEITOR_SENHA:-app_leitor_local}
+    ports:
+      - '${DB_PORT:-5436}:5432'
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./infra/db-init:/docker-entrypoint-initdb.d:ro
+      - ./infra/ingest-fixture:/ingest-fixture:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d gabarita']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  db-data:
