@@ -1,0 +1,47 @@
+// Banco PRÓPRIO do app. Nada aqui referencia o banco do ingest por foreign key:
+// `questao_id` é só o identificador do ingest (pode ficar órfão se a prova for reextraída).
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Usuario {
+  id        String     @id @default(uuid()) @db.Uuid
+  email     String     @unique
+  senhaHash String     @map("senha_hash")
+  nome      String?
+  criadoEm  DateTime   @default(now()) @map("criado_em")
+  respostas Resposta[]
+
+  @@map("usuario")
+}
+
+/// Uma tentativa de resposta. Guarda um retrato do gabarito no momento da resposta (para o
+/// histórico), mas o desempenho é recalculado com o gabarito vigente no ingest.
+model Resposta {
+  id              String   @id @default(uuid()) @db.Uuid
+  usuarioId       String   @map("usuario_id") @db.Uuid
+  usuario         Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  /// v_questao_estudo.questao_id do ingest (sem FK entre bancos)
+  questaoId       Int      @map("questao_id")
+  resposta        String
+  tipoItem        String   @map("tipo_item")
+  gabaritoStatus  String   @map("gabarito_status")
+  respostaCorreta String?  @map("resposta_correta")
+  gabaritoVersao  String?  @map("gabarito_versao")
+  pontuavel       Boolean
+  /// null quando não pontuável: nunca é acerto nem erro
+  correta         Boolean?
+  respondidaEm    DateTime @default(now()) @map("respondida_em")
+
+  @@index([usuarioId, respondidaEm])
+  @@index([usuarioId, questaoId])
+  @@map("resposta")
+}

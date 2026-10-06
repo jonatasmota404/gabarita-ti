@@ -1,0 +1,116 @@
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { FiltrosDisponiveis, Pagina, QuestaoDetalhe, QuestaoResumo } from '@gabarita/shared';
+import { trecho } from '../comum/texto.js';
+import type { Env } from '../config/env.js';
+import { IngestRepository, type QuestaoEstudo } from '../ingest/ingest.repository.js';
+import { ehPontuavel, opcoesResposta } from '../respostas/avaliacao.js';
+import { resolverArquivoRecorte } from './arquivo-recorte.js';
+import type { ListarQuestoesDto } from './dto/listar-questoes.dto.js';
+import { deduplicarRecortes, paraRecorteDto } from './recortes.js';
+
+@Injectable()
+export class QuestoesService {
+  constructor(
+    @Inject(IngestRepository) private readonly ingest: IngestRepository,
+    private readonly config: ConfigService<Env, true>,
+  ) {}
+
+  async listar(dto: ListarQuestoesDto): Promise<Pagina<QuestaoResumo>> {
+    const { pagina, porPagina, ...filtro } = dto;
+    const { questoes, total } = await this.ingest.listarQuestoes(filtro, {
+      offset: (pagina - 1) * porPagina,
+      limite: porPagina,
+    });
+    const topicos = await this.ingest.listarTopicos(questoes.map((q) => q.questaoId));
+    const principal = new Map<number, { area: string; topico: string }>();
+    // listarTopicos vem com o principal primeiro; sem principal, usa o mais confiável.
+    for (const t of topicos) {
+      if (!principal.has(t.questaoId))
+        principal.set(t.questaoId, { area: t.area, topico: t.topico });
+    }
+    return {
+      itens: questoes.map((q) => ({
+        ...this.camposComuns(q),
+        trecho: trecho(q.enunciado),
+        topicoPrincipal: principal.get(q.questaoId) ?? null,
+      })),
+      pagina,
+      porPagina,
+      total,
+    };
+  }
+
+  async detalhar(questaoId: number): Promise<QuestaoDetalhe> {
+    const q = await this.ingest.buscarQuestao(questaoId);
+    if (!q) throw new NotFoundException('Questão não encontrada (pode ter sido removida)');
+    const [alternativas, topicos, tecnologias, recortes] = await Promise.all([
+      q.tipoItem === 'certo_errado' ? [] : this.ingest.listarAlternativas(questaoId),
+      this.ingest.listarTopicos([questaoId]),
+      this.ingest.listarTecnologias(questaoId),
+      this.ingest.listarRecortes(questaoId),
+    ]);
+    return {
+      ...this.camposComuns(q),
+      provaId: q.provaId,
+      areaProva: q.areaProva,
+      tipoCaderno: q.tipoCaderno,
+      enunciado: q.enunciado,
+      textoApoio: q.textoApoio,
+      tipoCobranca: q.tipoCobranca,
+      nivelCognitivo: q.nivelCognitivo,
+      normaReferencia: q.normaReferencia,
+      alternativas: alternativas.map(({ letra, texto }) => ({ letra, texto })),
+      opcoesResposta: opcoesResposta(
+        q.tipoItem,
+        alternativas.map((a) => a.letra),
+      ),
+      pontuavel: ehPontuavel(q),
+      topicos: topicos.map(({ questaoId: _, ...t }) => t),
+      tecnologias: tecnologias.map(({ questaoId: _, ...t }) => t),
+      recortes: deduplicarRecortes(recortes).map(paraRecorteDto),
+    };
+  }
+
+  async filtros(): Promise<FiltrosDisponiveis> {
+    const { bancas, anos, topicos } = await this.ingest.listarFiltros();
+    const areas = new Map<number, FiltrosDisponiveis['areas'][number]>();
+    for (const t of topicos) {
+      const area = areas.get(t.areaId) ?? { areaId: t.areaId, area: t.area, topicos: [] };
+      area.topicos.push({ topicoId: t.topicoId, topico: t.topico });
+      areas.set(t.areaId, area);
+    }
+    return { bancas, anos, areas: [...areas.values()] };
+  }
+
+  /** O recorte precisa pertencer à questão (via view); o caminho vem do banco, nunca da URL. */
+  async arquivoRecorte(questaoId: number, recorteId: number) {
+    const recorte = (await this.ingest.listarRecortes(questaoId)).find(
+      (r) => r.recorteId === recorteId,
+    );
+    const arquivo =
+      recorte &&
+      (await resolverArquivoRecorte(
+        this.config.get('RECORTES_DIR', { infer: true }),
+        recorte.caminhoRelativo,
+      ));
+    if (!arquivo) throw new NotFoundException('Imagem indisponível');
+    return arquivo;
+  }
+
+  private camposComuns(q: QuestaoEstudo) {
+    return {
+      questaoId: q.questaoId,
+      banca: q.banca,
+      orgao: q.orgao,
+      ano: q.ano,
+      cargo: q.cargo,
+      numero: q.numero,
+      tipoItem: q.tipoItem,
+      gabaritoStatus: q.gabaritoStatus,
+      gabaritoVersao: q.gabaritoVersao,
+      classificada: q.classificada,
+      temRecorte: q.temRecorte,
+    };
+  }
+}
