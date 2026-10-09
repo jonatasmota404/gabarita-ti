@@ -26,14 +26,17 @@ infra/
 Requisitos: Node 24 (ou ≥ 22.12), pnpm 11 e Docker.
 
 ```bash
-cp .env.example .env              # valores de desenvolvimento; troque o JWT_SECRET
+cp .env.example .env              # AUTH_MODE=local por padrão
 pnpm install
 pnpm db:up                        # Postgres em localhost:5436 (app + fixture do ingest)
-pnpm db:migrate                   # aplica as migrações Prisma no banco do app
-pnpm dev                          # API em :3001, web em :3000
+pnpm dev                          # aplica as migrações pendentes, depois API em :3001 e web em :3000
 ```
 
-Abra http://localhost:3000, crie uma conta e resolva as questões de exemplo. A fixture cobre:
+`pnpm dev` roda `prisma migrate deploy` antes de subir a API, então `pnpm db:up` seguido de
+`pnpm dev` funciona num banco recém-criado, sem passo manual. (`pnpm db:migrate` continua
+existindo para criar novas migrações em desenvolvimento.)
+
+Abra http://localhost:3000: no modo local você cai direto no banco de questões. A fixture cobre:
 múltipla escolha, Certo/Errado, grupo com texto de apoio e figura compartilhada, figura no
 enunciado e nas alternativas, imagem ausente, anulada, sem gabarito, inconsistente, gabarito
 preliminar, questões sem classificação e questões repetidas entre provas (mesma
@@ -42,11 +45,26 @@ preliminar, questões sem classificação e questões repetidas entre provas (me
 O init do Postgres só roda na criação do volume (a fixture agora é a do contrato v1.1: quem já
 tem um volume antigo precisa recriá-lo). Para recriar tudo do zero, use `docker compose down -v && pnpm db:up`.
 
+### Modo de autenticação (`AUTH_MODE`)
+
+- `local` (padrão do `.env.example`): **sem login**. A API ignora tokens e atribui toda
+  requisição a um usuário fixo, `local@gabarita.ti` (criado automaticamente, sem senha utilizável),
+  que é dono de todas as respostas e do desempenho. Cadastro e login ficam desligados (a API
+  responde 404 e `/entrar` e `/cadastro` redirecionam para a home). A API só escuta em `127.0.0.1`.
+  > **Não exponha o modo local fora da sua máquina** (nem por túnel, proxy ou rede): qualquer um
+  > que alcançar a API terá acesso total, sem autenticação.
+- `jwt`: cadastro e login com e-mail/senha e JWT (exige `JWT_SECRET` com ≥ 32 caracteres). Sem
+  `AUTH_MODE`, o código assume `jwt`. O web lê a mesma variável do `.env` da raiz, então API e web
+  sempre concordam; reinicie ambos ao trocar.
+
+As respostas feitas no modo local pertencem ao usuário local e não aparecem numa conta criada
+depois no modo `jwt`.
+
 ### Scripts (na raiz)
 
 | comando       | o quê                                      |
 | ------------- | ------------------------------------------ |
-| `pnpm dev`    | API e web em modo watch                    |
+| `pnpm dev`    | migra o banco, depois API e web em watch   |
 | `pnpm test`   | testes da API (unit + integração) e do web |
 | `pnpm lint`   | ESLint + Prettier (check)                  |
 | `pnpm build`  | build de shared, API e web                 |

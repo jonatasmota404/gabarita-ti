@@ -1,8 +1,15 @@
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { hash, verify } from '@node-rs/argon2';
 import type { Sessao, Usuario } from '@gabarita/shared';
 import { Prisma } from '../generated/prisma/client.js';
+import type { Env } from '../config/env.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type { CadastroDto, EntrarDto } from './dto/credenciais.dto.js';
 
@@ -17,9 +24,16 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly config: ConfigService<Env, true>,
   ) {}
 
+  /** No modo local não existe cadastro nem login: a API responde 404. */
+  private exigirJwt() {
+    if (this.config.get('AUTH_MODE', { infer: true }) === 'local') throw new NotFoundException();
+  }
+
   async cadastrar(dto: CadastroDto): Promise<Sessao> {
+    this.exigirJwt();
     const senhaHash = await hash(dto.senha, ARGON2);
     try {
       const usuario = await this.prisma.usuario.create({
@@ -35,9 +49,13 @@ export class AuthService {
   }
 
   async entrar(dto: EntrarDto): Promise<Sessao> {
+    this.exigirJwt();
     const usuario = await this.prisma.usuario.findUnique({ where: { email: dto.email } });
     this.hashFalso ??= hash('senha-que-nao-existe', ARGON2);
-    const ok = await verify(usuario?.senhaHash ?? (await this.hashFalso), dto.senha);
+    // Hash que não é argon2 (ex.: o usuário local, sem senha) nunca confere.
+    const ok = await verify(usuario?.senhaHash ?? (await this.hashFalso), dto.senha).catch(
+      () => false,
+    );
     if (!usuario || !ok) throw new UnauthorizedException('E-mail ou senha incorretos');
     return this.sessao(usuario);
   }

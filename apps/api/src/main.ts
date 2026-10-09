@@ -11,7 +11,9 @@ async function bootstrap() {
   configurarApp(app);
   const origens = config.get('CORS_ORIGINS', { infer: true });
   if (origens.length) app.enableCors({ origin: origens });
-  await app.listen(config.get('PORT', { infer: true }));
+  // Modo local não tem autenticação: só aceita conexões da própria máquina.
+  const local = config.get('AUTH_MODE', { infer: true }) === 'local';
+  await app.listen(config.get('PORT', { infer: true }), local ? '127.0.0.1' : '0.0.0.0');
 }
 
 void bootstrap();

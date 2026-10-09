@@ -5,6 +5,13 @@ const PUBLICAS = ['/entrar', '/cadastro', '/offline'];
 
 export function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
+  if (process.env.AUTH_MODE === 'local') {
+    // Modo local: sem login. As telas de acesso voltam para a home.
+    if (pathname === '/entrar' || pathname === '/cadastro') {
+      return NextResponse.redirect(new URL('/', req.url));
+    }
+    return NextResponse.next();
+  }
   const logado = req.cookies.has('gabarita_sessao');
   const publica = PUBLICAS.includes(pathname);
   if (!logado && !publica) {

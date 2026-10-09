@@ -4,6 +4,11 @@ import 'server-only';
 export const COOKIE_SESSAO = 'gabarita_sessao';
 const SETE_DIAS = 60 * 60 * 24 * 7;
 
+/** Mesma variável da API (lida do .env da raiz). Sem ela, vale o modo seguro: jwt. */
+export function modoLocal() {
+  return process.env.AUTH_MODE === 'local';
+}
+
 export function apiUrl(caminho: string) {
   const base = process.env.API_URL ?? 'http://localhost:3001';
   return new URL(caminho.replace(/^\/+/, ''), base.endsWith('/') ? base : `${base}/`);

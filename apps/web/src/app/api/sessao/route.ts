@@ -1,9 +1,17 @@
 import { cookies } from 'next/headers';
 import type { Sessao } from '@gabarita/shared';
-import { COOKIE_SESSAO, apiUrl, erroJson, opcoesCookie, origemValida } from '@/lib/servidor';
+import {
+  COOKIE_SESSAO,
+  apiUrl,
+  erroJson,
+  modoLocal,
+  opcoesCookie,
+  origemValida,
+} from '@/lib/servidor';
 
 /** Entrar ou criar conta: chama a API e guarda o JWT em cookie httpOnly. */
 export async function POST(req: Request) {
+  if (modoLocal()) return erroJson(404, 'Não encontrado');
   if (!origemValida(req)) return erroJson(403, 'Origem não permitida');
   const corpo = (await req.json().catch(() => null)) as {
     modo?: string;
@@ -35,6 +43,11 @@ export async function POST(req: Request) {
 }
 
 export async function GET() {
+  if (modoLocal()) {
+    const resposta = await fetch(apiUrl('/auth/eu'), { cache: 'no-store' }).catch(() => null);
+    if (!resposta?.ok) return erroJson(resposta?.status ?? 502, 'Serviço indisponível');
+    return Response.json({ ...(await resposta.json()), modoLocal: true });
+  }
   const token = (await cookies()).get(COOKIE_SESSAO)?.value;
   if (!token) return erroJson(401, 'Sem sessão');
   const resposta = await fetch(apiUrl('/auth/eu'), {
@@ -49,6 +62,7 @@ export async function GET() {
 }
 
 export async function DELETE(req: Request) {
+  if (modoLocal()) return new Response(null, { status: 204 });
   if (!origemValida(req)) return erroJson(403, 'Origem não permitida');
   (await cookies()).delete(COOKIE_SESSAO);
   return new Response(null, { status: 204 });

@@ -13,7 +13,7 @@ import {
   recriarIngest,
 } from './bancos.js';
 
-describe('API (e2e)', () => {
+describe('API (e2e, AUTH_MODE=jwt)', () => {
   let app: INestApplication;
   let http: ReturnType<typeof request>;
   let token: string;
@@ -23,6 +23,7 @@ describe('API (e2e)', () => {
     await recriarIngest();
     // O ConfigModule lê o ambiente quando o AppModule é importado: configure antes.
     Object.assign(process.env, {
+      AUTH_MODE: 'jwt',
       DATABASE_URL: APP_URL,
       INGEST_DATABASE_URL: INGEST_LEITOR_URL,
       RECORTES_DIR: join(FIXTURE_DIR, 'recortes'),
@@ -73,6 +74,17 @@ describe('API (e2e)', () => {
       await http
         .post('/auth/entrar')
         .send({ email: 'ninguem@exemplo.com', senha: 'errada!!' })
+        .expect(401);
+    });
+
+    it('não deixa entrar como o usuário local (sem senha)', async () => {
+      const { PrismaService } = await import('../src/prisma/prisma.service.js');
+      await app.get<PrismaService>(PrismaService).usuario.create({
+        data: { email: 'local@gabarita.ti', senhaHash: '!sem-senha' },
+      });
+      await http
+        .post('/auth/entrar')
+        .send({ email: 'local@gabarita.ti', senha: 'qualquer-coisa' })
         .expect(401);
     });
 

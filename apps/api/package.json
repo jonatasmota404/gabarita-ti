@@ -6,7 +6,7 @@
   "scripts": {
     "prebuild": "prisma generate",
     "build": "tsc -p tsconfig.build.json",
-    "dev": "prisma generate && nest start --watch",
+    "dev": "prisma generate && prisma migrate deploy && nest start --watch",
     "start": "node dist/main.js",
     "test": "prisma generate && vitest run",
     "test:watch": "vitest",

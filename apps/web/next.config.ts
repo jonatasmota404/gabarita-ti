@@ -1,5 +1,12 @@
 import type { NextConfig } from 'next';
 
+// O .env fica na raiz do monorepo (como na API); o ambiente já exportado tem precedência.
+try {
+  process.loadEnvFile('../../.env');
+} catch {
+  // sem .env: valem os padrões
+}
+
 const config: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
