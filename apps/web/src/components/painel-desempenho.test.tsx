@@ -12,6 +12,7 @@ describe('PainelDesempenho', () => {
             erros: 1,
             taxaAcerto: 2 / 3,
             respondidas: 6,
+            conteudosRespondidos: 4,
             naoPontuadas: 2,
             deQuestoesRemovidas: 1,
           },
@@ -23,6 +24,7 @@ describe('PainelDesempenho', () => {
       />,
     );
     expect(screen.getByTestId('taxa-geral')).toHaveTextContent('67%');
+    expect(screen.getByTestId('conteudos-respondidos')).toHaveTextContent('4 questões distintas');
     expect(screen.getByText(/2 em questões anuladas ou sem gabarito/)).toBeInTheDocument();
     expect(screen.getByText(/1 em questões removidas/)).toBeInTheDocument();
     expect(screen.getByRole('meter', { name: /Banco de Dados/ })).toHaveAttribute(

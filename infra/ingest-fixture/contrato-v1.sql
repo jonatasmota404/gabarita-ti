@@ -1,5 +1,5 @@
--- Reprodução LOCAL do contrato de leitura v1 do provas-ti-ingest
--- (provas-ti-ingest/docs/contrato-app.md). Usado em desenvolvimento e nos testes.
+-- Reprodução LOCAL do contrato de leitura v1.1 do provas-ti-ingest (v1 + coluna
+-- chave_conteudo em v_questao_estudo; provas-ti-ingest/docs/contrato-app.md). Usado em desenvolvimento e nos testes.
 --
 -- As tabelas fx_* são só suporte da fixture (no ingest real as tabelas base são outras e
 -- o app NÃO tem acesso a elas). O que importa é o formato das views v_questao_*: mesmos
@@ -27,7 +27,8 @@ CREATE TABLE fx_questao_estudo (
   nivel_cognitivo_confianca double precision,
   norma_referencia          text,
   classificada              boolean NOT NULL DEFAULT false,
-  tem_recorte               boolean NOT NULL DEFAULT false
+  tem_recorte               boolean NOT NULL DEFAULT false,
+  chave_conteudo            text
 );
 
 CREATE TABLE fx_questao_alternativa (
@@ -73,7 +74,7 @@ CREATE VIEW v_questao_estudo AS
 SELECT questao_id, prova_id, banca, orgao, ano, cargo, area_prova, tipo_caderno, numero,
        tipo_item, enunciado, texto_apoio, gabarito_status, resposta_correta, gabarito_versao,
        tipo_cobranca, tipo_cobranca_confianca, nivel_cognitivo, nivel_cognitivo_confianca,
-       norma_referencia, classificada, tem_recorte
+       norma_referencia, classificada, tem_recorte, chave_conteudo
   FROM fx_questao_estudo;
 
 CREATE VIEW v_questao_alternativa AS

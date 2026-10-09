@@ -5,7 +5,7 @@ ver o gabarito na hora e acompanhar a taxa de acerto por área e tópico. Mobile
 com modo escuro.
 
 As questões vêm do **provas-ti-ingest** (projeto separado), lidas **somente** pelas views do
-contrato de leitura v1 (`provas-ti-ingest/docs/contrato-app.md`). O app tem o próprio banco
+contrato de leitura v1.1 (`provas-ti-ingest/docs/contrato-app.md`). O app tem o próprio banco
 para usuários e respostas.
 
 ## Estrutura
@@ -36,9 +36,11 @@ pnpm dev                          # API em :3001, web em :3000
 Abra http://localhost:3000, crie uma conta e resolva as questões de exemplo. A fixture cobre:
 múltipla escolha, Certo/Errado, grupo com texto de apoio e figura compartilhada, figura no
 enunciado e nas alternativas, imagem ausente, anulada, sem gabarito, inconsistente, gabarito
-preliminar e questões sem classificação.
+preliminar, questões sem classificação e questões repetidas entre provas (mesma
+`chave_conteudo`, inclusive com gabarito anulado em uma das cópias e chave `NULL`).
 
-O init do Postgres só roda na criação do volume. Para recriar tudo do zero, use `docker compose down -v && pnpm db:up`.
+O init do Postgres só roda na criação do volume (a fixture agora é a do contrato v1.1: quem já
+tem um volume antigo precisa recriá-lo). Para recriar tudo do zero, use `docker compose down -v && pnpm db:up`.
 
 ### Scripts (na raiz)
 
@@ -81,6 +83,19 @@ fixture do contrato e um role que só tem `SELECT` nas views. Nunca tocam no ban
 - **Desempenho recalculado.** A taxa de acerto reavalia cada resposta com o gabarito
   **vigente** no ingest. Assim, se um preliminar mudar ou uma questão for anulada depois, a
   estatística acompanha. A resposta guarda um retrato do gabarito só para auditoria.
+- **Questões repetidas entre provas (desduplicação).** `v_questao_estudo.chave_conteudo` (v1.1)
+  identifica o mesmo conteúdo em provas diferentes; chave `NULL` nunca agrupa. O banco de
+  questões e os totais contam conteúdos distintos. O representante de cada conteúdo é a cópia
+  com gabarito `ok`, depois a de ano mais recente, depois a de menor id. Com filtro de
+  banca/ano/área/tópico, o conteúdo aparece se qualquer cópia atender e a cópia exibida é a
+  melhor entre as que atendem. A tela da questão lista onde mais ela caiu ("Também caiu
+  em"). Gabarito, pontuação, histórico e desempenho usam sempre o representante, então
+  cópias divergentes (ex.: anulada numa, ok noutra) não se contradizem. A resposta continua
+  gravada com o `questao_id` da cópia exibida; o desempenho resolve cada resposta para o
+  representante na hora da leitura (cópias antigas respondidas por id seguem casando pelo
+  conteúdo). Toda tentativa entra na taxa de acerto, e `conteudosRespondidos` conta cada
+  conteúdo uma vez. A chave não é estável numa reextração, então nunca é guardada: é lida da
+  view a cada consulta.
 - **`questao_id` órfão.** Não há FK entre bancos. Respostas a ids que sumiram (ex.: prova
   reextraída) aparecem no histórico como "questão removida" e ficam fora da taxa de acerto,
   contadas à parte.
@@ -106,5 +121,4 @@ fixture do contrato e um role que só tem `SELECT` nas views. Nunca tocam no ban
 ## Fora do escopo (por enquanto)
 
 Plano de estudo, Anki/repetição espaçada, simulados, tutor de IA, ranking, pagamentos, app
-nativo e login social. Também não há desduplicação de questões repetidas entre provas, porque o
-contrato não traz a chave para isso.
+nativo e login social.

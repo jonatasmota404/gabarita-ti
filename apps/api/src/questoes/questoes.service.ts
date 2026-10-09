@@ -1,9 +1,19 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { FiltrosDisponiveis, Pagina, QuestaoDetalhe, QuestaoResumo } from '@gabarita/shared';
+import type {
+  FiltrosDisponiveis,
+  OcorrenciaConteudo,
+  Pagina,
+  QuestaoDetalhe,
+  QuestaoResumo,
+} from '@gabarita/shared';
 import { trecho } from '../comum/texto.js';
 import type { Env } from '../config/env.js';
-import { IngestRepository, type QuestaoEstudo } from '../ingest/ingest.repository.js';
+import {
+  IngestRepository,
+  type CopiaIngest,
+  type QuestaoEstudo,
+} from '../ingest/ingest.repository.js';
 import { ehPontuavel, opcoesResposta } from '../respostas/avaliacao.js';
 import { resolverArquivoRecorte } from './arquivo-recorte.js';
 import type { ListarQuestoesDto } from './dto/listar-questoes.dto.js';
@@ -22,7 +32,11 @@ export class QuestoesService {
       offset: (pagina - 1) * porPagina,
       limite: porPagina,
     });
-    const topicos = await this.ingest.listarTopicos(questoes.map((q) => q.questaoId));
+    const ids = questoes.map((q) => q.questaoId);
+    const [topicos, representantes] = await Promise.all([
+      this.ingest.listarTopicos(ids),
+      this.ingest.resolverRepresentantes(ids),
+    ]);
     const principal = new Map<number, { area: string; topico: string }>();
     // listarTopicos vem com o principal primeiro; sem principal, usa o mais confiável.
     for (const t of topicos) {
@@ -31,7 +45,8 @@ export class QuestoesService {
     }
     return {
       itens: questoes.map((q) => ({
-        ...this.camposComuns(q),
+        // A cópia exibida pode ser a que atende ao filtro, mas o gabarito é do representante.
+        ...this.camposComuns(q, representantes.get(q.questaoId)),
         trecho: trecho(q.enunciado),
         topicoPrincipal: principal.get(q.questaoId) ?? null,
       })),
@@ -44,14 +59,19 @@ export class QuestoesService {
   async detalhar(questaoId: number): Promise<QuestaoDetalhe> {
     const q = await this.ingest.buscarQuestao(questaoId);
     if (!q) throw new NotFoundException('Questão não encontrada (pode ter sido removida)');
-    const [alternativas, topicos, tecnologias, recortes] = await Promise.all([
-      q.tipoItem === 'certo_errado' ? [] : this.ingest.listarAlternativas(questaoId),
-      this.ingest.listarTopicos([questaoId]),
-      this.ingest.listarTecnologias(questaoId),
-      this.ingest.listarRecortes(questaoId),
-    ]);
+    const [alternativas, topicos, tecnologias, recortes, representantes, copias] =
+      await Promise.all([
+        q.tipoItem === 'certo_errado' ? [] : this.ingest.listarAlternativas(questaoId),
+        this.ingest.listarTopicos([questaoId]),
+        this.ingest.listarTecnologias(questaoId),
+        this.ingest.listarRecortes(questaoId),
+        this.ingest.resolverRepresentantes([questaoId]),
+        this.ingest.listarCopias(questaoId),
+      ]);
+    // Pontuação sempre pelo representante, para as cópias não se contradizerem.
+    const gabarito = representantes.get(questaoId) ?? q;
     return {
-      ...this.camposComuns(q),
+      ...this.camposComuns(q, gabarito),
       provaId: q.provaId,
       areaProva: q.areaProva,
       tipoCaderno: q.tipoCaderno,
@@ -65,10 +85,11 @@ export class QuestoesService {
         q.tipoItem,
         alternativas.map((a) => a.letra),
       ),
-      pontuavel: ehPontuavel(q),
+      pontuavel: ehPontuavel(gabarito),
       topicos: topicos.map(({ questaoId: _, ...t }) => t),
       tecnologias: tecnologias.map(({ questaoId: _, ...t }) => t),
       recortes: deduplicarRecortes(recortes).map(paraRecorteDto),
+      tambemCaiuEm: ocorrenciasEmOutrasProvas(q, copias),
     };
   }
 
@@ -98,7 +119,10 @@ export class QuestoesService {
     return arquivo;
   }
 
-  private camposComuns(q: QuestaoEstudo) {
+  private camposComuns(
+    q: QuestaoEstudo,
+    gabarito: Pick<QuestaoEstudo, 'gabaritoStatus' | 'gabaritoVersao'> = q,
+  ) {
     return {
       questaoId: q.questaoId,
       banca: q.banca,
@@ -107,10 +131,24 @@ export class QuestoesService {
       cargo: q.cargo,
       numero: q.numero,
       tipoItem: q.tipoItem,
-      gabaritoStatus: q.gabaritoStatus,
-      gabaritoVersao: q.gabaritoVersao,
+      gabaritoStatus: gabarito.gabaritoStatus,
+      gabaritoVersao: gabarito.gabaritoVersao,
       classificada: q.classificada,
       temRecorte: q.temRecorte,
     };
   }
+}
+
+/**
+ * Provas em que o conteúdo também caiu. Outros cadernos da mesma prova (mesma banca, órgão e
+ * ano da cópia atual) e repetições de banca/órgão/ano não entram.
+ */
+export function ocorrenciasEmOutrasProvas(
+  atual: Pick<QuestaoEstudo, 'banca' | 'orgao' | 'ano'>,
+  copias: CopiaIngest[],
+): OcorrenciaConteudo[] {
+  const chave = (c: Pick<QuestaoEstudo, 'banca' | 'orgao' | 'ano'>) =>
+    JSON.stringify([c.banca, c.orgao, c.ano]);
+  const vistas = new Set([chave(atual)]);
+  return copias.filter((c) => !vistas.has(chave(c)) && vistas.add(chave(c)));
 }

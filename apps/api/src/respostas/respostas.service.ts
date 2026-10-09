@@ -36,16 +36,18 @@ export class RespostasService {
       );
     }
 
-    const avaliacao = avaliar(q, resposta);
+    // Pontua pelo representante do conteúdo; a resposta fica gravada com a cópia exibida.
+    const gabarito = (await this.ingest.resolverRepresentantes([questaoId])).get(questaoId) ?? q;
+    const avaliacao = avaliar(gabarito, resposta);
     const registro = await this.prisma.resposta.create({
       data: {
         usuarioId,
         questaoId,
         resposta,
         tipoItem: q.tipoItem,
-        gabaritoStatus: q.gabaritoStatus,
+        gabaritoStatus: gabarito.gabaritoStatus,
         respostaCorreta: avaliacao.respostaCorreta,
-        gabaritoVersao: q.gabaritoVersao,
+        gabaritoVersao: gabarito.gabaritoVersao,
         pontuavel: avaliacao.pontuavel,
         correta: avaliacao.correta,
       },
@@ -56,9 +58,9 @@ export class RespostasService {
       resposta,
       pontuavel: avaliacao.pontuavel,
       correta: avaliacao.correta,
-      gabaritoStatus: q.gabaritoStatus,
+      gabaritoStatus: gabarito.gabaritoStatus,
       respostaCorreta: avaliacao.respostaCorreta,
-      gabaritoVersao: q.gabaritoVersao,
+      gabaritoVersao: gabarito.gabaritoVersao,
       respondidaEm: registro.respondidaEm.toISOString(),
     };
   }
@@ -70,12 +72,24 @@ export class RespostasService {
       where: { usuarioId },
       select: { questaoId: true, resposta: true },
     });
-    const ids = [...new Set(respostas.map((r) => r.questaoId))];
-    const [gabaritos, topicos] = await Promise.all([
-      this.ingest.buscarGabaritos(ids),
-      this.ingest.listarTopicos(ids),
+    // Cada resposta é atribuída ao representante do conteúdo (derivado da view agora, nada é
+    // persistido): cópias antigas respondidas por id continuam casando pelo conteúdo. Id
+    // órfão não resolve e segue como removido.
+    const representantes = await this.ingest.resolverRepresentantes([
+      ...new Set(respostas.map((r) => r.questaoId)),
     ]);
-    return calcularDesempenho(respostas, gabaritos, topicos);
+    const gabaritos = [
+      ...new Map([...representantes.values()].map((g) => [g.questaoId, g])).values(),
+    ];
+    const topicos = await this.ingest.listarTopicos(gabaritos.map((g) => g.questaoId));
+    return calcularDesempenho(
+      respostas.map((r) => ({
+        ...r,
+        questaoId: representantes.get(r.questaoId)?.questaoId ?? r.questaoId,
+      })),
+      gabaritos,
+      topicos,
+    );
   }
 
   async historico(
@@ -92,11 +106,13 @@ export class RespostasService {
         take: porPagina,
       }),
     ]);
-    const gabaritos = new Map(
-      (await this.ingest.buscarGabaritos([...new Set(respostas.map((r) => r.questaoId))])).map(
-        (g) => [g.questaoId, g],
-      ),
-    );
+    const ids = [...new Set(respostas.map((r) => r.questaoId))];
+    // Mostra a cópia respondida, mas avalia pelo representante do conteúdo.
+    const [exibidas, representantes] = await Promise.all([
+      this.ingest.buscarGabaritos(ids),
+      this.ingest.resolverRepresentantes(ids),
+    ]);
+    const gabaritos = new Map(exibidas.map((g) => [g.questaoId, g]));
     return {
       itens: respostas.map((r) => {
         const g = gabaritos.get(r.questaoId);
@@ -114,7 +130,8 @@ export class RespostasService {
             questao: null,
           };
         }
-        const { pontuavel, correta } = avaliar(g, r.resposta);
+        const vigente = representantes.get(r.questaoId) ?? g;
+        const { pontuavel, correta } = avaliar(vigente, r.resposta);
         return {
           respostaId: r.id,
           questaoId: r.questaoId,
@@ -122,7 +139,7 @@ export class RespostasService {
           respondidaEm: r.respondidaEm.toISOString(),
           correta,
           pontuavel,
-          gabaritoStatus: g.gabaritoStatus,
+          gabaritoStatus: vigente.gabaritoStatus,
           removida: false,
           questao: {
             banca: g.banca,

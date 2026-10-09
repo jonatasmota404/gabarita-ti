@@ -52,6 +52,11 @@ export function PainelDesempenho({ desempenho: d }: { desempenho: Desempenho }) 
             <span className="font-semibold text-erro">{d.geral.erros} erros</span> em {pontuadas}{' '}
             {pontuadas === 1 ? 'resposta pontuada' : 'respostas pontuadas'}
           </p>
+          <p className="mt-0.5 text-xs text-suave" data-testid="conteudos-respondidos">
+            {d.geral.conteudosRespondidos}{' '}
+            {d.geral.conteudosRespondidos === 1 ? 'questão distinta' : 'questões distintas'}{' '}
+            (repetidas em outras provas contam uma vez)
+          </p>
         </div>
       </Cartao>
 

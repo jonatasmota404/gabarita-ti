@@ -62,6 +62,7 @@ export interface Alternativa {
   texto: string;
 }
 
+/** Cada conteúdo distinto aparece uma vez nas listagens (cópias em outras provas são unidas). */
 export interface QuestaoResumo {
   questaoId: number;
   banca: string;
@@ -77,6 +78,15 @@ export interface QuestaoResumo {
   classificada: boolean;
   temRecorte: boolean;
   topicoPrincipal: { area: string; topico: string } | null;
+}
+
+/** Outra prova em que o mesmo conteúdo já caiu. */
+export interface OcorrenciaConteudo {
+  /** Cópia do conteúdo naquela prova (abre a questão correspondente). */
+  questaoId: number;
+  banca: string;
+  orgao: string;
+  ano: number | null;
 }
 
 export interface QuestaoDetalhe extends Omit<QuestaoResumo, 'trecho' | 'topicoPrincipal'> {
@@ -98,6 +108,12 @@ export interface QuestaoDetalhe extends Omit<QuestaoResumo, 'trecho' | 'topicoPr
   tecnologias: Tecnologia[];
   /** Já deduplicados e em ordem de leitura. */
   recortes: Recorte[];
+  /**
+   * Outras provas em que este mesmo conteúdo caiu (mais recentes primeiro; sem repetir
+   * banca/órgão/ano nem a prova desta cópia). O gabarito e `pontuavel` seguem sempre a
+   * cópia representante do conteúdo, nunca divergem entre as cópias.
+   */
+  tambemCaiuEm: OcorrenciaConteudo[];
 }
 
 export interface ResultadoResposta {
@@ -132,6 +148,8 @@ export interface Desempenho {
   geral: Placar & {
     /** Total de respostas registradas, inclusive não pontuáveis e de questões removidas. */
     respondidas: number;
+    /** Conteúdos distintos já respondidos (cópias da mesma questão contam uma vez). */
+    conteudosRespondidos: number;
     /** Respostas a questões anuladas/sem gabarito/inconsistentes (não contam). */
     naoPontuadas: number;
     /** Respostas a questões que não existem mais no banco de questões (não contam). */

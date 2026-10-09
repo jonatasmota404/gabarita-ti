@@ -27,6 +27,10 @@ class Contador {
  * preliminar pode virar definitivo ou anulada). Respostas a questões que não existem mais
  * (questao_id órfão) e a questões não pontuáveis não entram em acerto/erro, só nas contagens.
  * Uma questão com tópicos em várias áreas conta em cada área (uma vez por área).
+ *
+ * As respostas já chegam com o `questaoId` do representante do conteúdo (e `gabaritos` e
+ * `topicos` são dele): cópias do mesmo conteúdo pontuam igual e contam como um só conteúdo
+ * em `conteudosRespondidos`. Cada tentativa continua entrando em acertos/erros.
  */
 export function calcularDesempenho(
   respostas: RespostaRegistrada[],
@@ -49,6 +53,7 @@ export function calcularDesempenho(
   >();
   let naoPontuadas = 0;
   let deQuestoesRemovidas = 0;
+  const conteudos = new Set<number>();
 
   for (const r of respostas) {
     const gabarito = porQuestao.get(r.questaoId);
@@ -56,6 +61,7 @@ export function calcularDesempenho(
       deQuestoesRemovidas++;
       continue;
     }
+    conteudos.add(r.questaoId);
     const { pontuavel, correta } = avaliar(gabarito, r.resposta);
     if (!pontuavel) {
       naoPontuadas++;
@@ -87,7 +93,13 @@ export function calcularDesempenho(
   const porVolume = <T extends Placar>(a: T, b: T) => b.acertos + b.erros - (a.acertos + a.erros);
 
   return {
-    geral: { ...geral.placar(), respondidas: respostas.length, naoPontuadas, deQuestoesRemovidas },
+    geral: {
+      ...geral.placar(),
+      respondidas: respostas.length,
+      conteudosRespondidos: conteudos.size,
+      naoPontuadas,
+      deQuestoesRemovidas,
+    },
     porArea: [...areas.entries()]
       .map(([areaId, a]) => ({
         areaId,

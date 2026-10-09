@@ -37,6 +37,7 @@ export const questaoME = (p: Partial<QuestaoDetalhe> = {}): QuestaoDetalhe => ({
   topicos: [],
   tecnologias: [],
   recortes: [],
+  tambemCaiuEm: [],
   ...p,
 });
 

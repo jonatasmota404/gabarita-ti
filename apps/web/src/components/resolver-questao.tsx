@@ -98,6 +98,21 @@ export function ResolverQuestao({
         </div>
       </header>
 
+      {questao.tambemCaiuEm.length > 0 && (
+        <p className="mb-4 text-sm text-suave" data-testid="tambem-caiu-em">
+          Também caiu em:{' '}
+          {questao.tambemCaiuEm.map((o, i) => (
+            <span key={o.questaoId}>
+              {i > 0 && ', '}
+              <Link href={`/questoes/${o.questaoId}`} className="underline underline-offset-2">
+                {rotuloBanca(o.banca)}
+                {o.ano ? ` ${o.ano}` : ''} ({o.orgao})
+              </Link>
+            </span>
+          ))}
+        </p>
+      )}
+
       {!questao.pontuavel && (
         <div className="mb-4">
           <AvisoStatus status={questao.gabaritoStatus} />

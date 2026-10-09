@@ -1,7 +1,9 @@
--- Questões de exemplo no formato do contrato v1. Cobrem: múltipla escolha, Certo/Errado,
+-- Questões de exemplo no formato do contrato v1.1. Cobrem: múltipla escolha, Certo/Errado,
 -- grupo com texto de apoio (e recorte de apoio repetido em cada questão do grupo), figura
 -- no enunciado e em alternativa, anulada, sem gabarito, inconsistente, gabarito preliminar
--- e questão ainda sem classificação. IDs propositalmente não sequenciais.
+-- questão ainda sem classificação e questões repetidas entre provas (chave_conteudo): cópias
+-- com a mesma chave, empate de ano, gabarito anulado em uma cópia e ok em outra, e cópias com
+-- chave NULL (nunca agrupadas). IDs propositalmente não sequenciais.
 
 INSERT INTO fx_questao_estudo (questao_id, prova_id, banca, orgao, ano, cargo, area_prova,
   tipo_caderno, numero, tipo_item, enunciado, texto_apoio, gabarito_status, resposta_correta,
@@ -47,6 +49,45 @@ INSERT INTO fx_questao_estudo (questao_id, prova_id, banca, orgao, ano, cargo, a
  'O princípio SOLID que recomenda depender de abstrações e não de implementações é o',
  NULL, 'ok', 'E', 'definitivo', 'definicao', 0.95, 'lembrar', 0.9, NULL, true, false);
 
+-- Conteúdos repetidos entre provas. Chave 'a…' = 101/601/602 (todas ok, mesmo gabarito; 101 e 602
+-- empatam em ano, vence o menor id; 602 é outro caderno da mesma prova de 101). Chave 'b…' =
+-- 604 (anulada, 2024) e 605 (ok, 2018): o representante é a 605 mesmo sendo mais antiga.
+-- 606 e 607 têm o mesmo enunciado mas chave NULL: são distintas.
+UPDATE fx_questao_estudo SET chave_conteudo = repeat('a', 64) WHERE questao_id = 101;
+
+INSERT INTO fx_questao_estudo (questao_id, prova_id, banca, orgao, ano, cargo, area_prova,
+  tipo_caderno, numero, tipo_item, enunciado, texto_apoio, gabarito_status, resposta_correta,
+  gabarito_versao, tipo_cobranca, tipo_cobranca_confianca, nivel_cognitivo,
+  nivel_cognitivo_confianca, norma_referencia, classificada, tem_recorte, chave_conteudo) VALUES
+(601, 60, 'fgv', 'TCE-RJ', 2021, 'Analista de Controle Externo', NULL, NULL, 18,
+ 'multipla_escolha',
+ 'Uma relação está na terceira forma normal (3FN) quando está na 2FN e',
+ NULL, 'ok', 'B', 'definitivo', 'definicao', 0.9, 'lembrar', 0.85, NULL, true, false,
+ repeat('a', 64)),
+(602, 11, 'cesgranrio', 'Petrobras', 2023, 'Analista de Sistemas', 'Infraestrutura', '2', 5,
+ 'multipla_escolha',
+ 'Uma relação está na terceira forma normal (3FN) quando está na 2FN e',
+ NULL, 'ok', 'B', 'definitivo', 'definicao', 0.9, 'lembrar', 0.85, NULL, true, false,
+ repeat('a', 64)),
+(604, 70, 'vunesp', 'Prefeitura de Campinas', 2024, 'Analista de TI', NULL, NULL, 22,
+ 'multipla_escolha',
+ 'O padrão de projeto que define uma dependência um-para-muitos entre objetos é o',
+ NULL, 'anulada', NULL, 'definitivo', 'definicao', 0.9, 'lembrar', 0.8, NULL, true, false,
+ repeat('b', 64)),
+(605, 71, 'fcc', 'TRT 15ª Região', 2018, 'Analista Judiciário', NULL, NULL, 30,
+ 'multipla_escolha',
+ 'O padrão de projeto que define uma dependência um-para-muitos entre objetos é o',
+ NULL, 'ok', 'C', 'definitivo', 'definicao', 0.9, 'lembrar', 0.8, NULL, true, false,
+ repeat('b', 64)),
+(606, 72, 'fcc', 'TRT 4ª Região', 2017, 'Analista Judiciário', NULL, NULL, 9,
+ 'multipla_escolha',
+ 'Em UML, o diagrama que mostra a sequência de mensagens entre objetos é o',
+ NULL, 'ok', 'A', 'definitivo', 'definicao', 0.9, 'lembrar', 0.8, NULL, true, false, NULL),
+(607, 73, 'vunesp', 'Prefeitura de Santos', 2016, 'Analista de TI', NULL, NULL, 11,
+ 'multipla_escolha',
+ 'Em UML, o diagrama que mostra a sequência de mensagens entre objetos é o',
+ NULL, 'ok', 'A', 'definitivo', 'definicao', 0.9, 'lembrar', 0.8, NULL, true, false, NULL);
+
 INSERT INTO fx_questao_alternativa (questao_id, letra, texto) VALUES
 (101, 'A', 'todos os atributos são atômicos.'),
 (101, 'B', 'nenhum atributo não chave depende transitivamente da chave primária.'),
@@ -78,6 +119,17 @@ INSERT INTO fx_questao_alternativa (questao_id, letra, texto) VALUES
 (520, 'D', 'da segregação de interfaces.'),
 (520, 'E', 'da inversão de dependência.');
 
+INSERT INTO fx_questao_alternativa (questao_id, letra, texto)
+SELECT q.id, a.letra, a.texto
+  FROM (VALUES (601), (602)) AS q(id)
+ CROSS JOIN fx_questao_alternativa a
+ WHERE a.questao_id = 101;
+
+INSERT INTO fx_questao_alternativa (questao_id, letra, texto)
+SELECT q.id, l.letra, 'opção ' || l.letra
+  FROM (VALUES (604), (605), (606), (607)) AS q(id)
+ CROSS JOIN (VALUES ('A'), ('B'), ('C'), ('D'), ('E')) AS l(letra);
+
 INSERT INTO fx_questao_topico (questao_id, area_id, area, topico_id, topico, principal, confianca) VALUES
 (101, 1, 'Banco de Dados', 11, 'Normalização', true, 0.93),
 (102, 1, 'Banco de Dados', 12, 'Modelagem de Dados', true, 0.81),
@@ -86,7 +138,13 @@ INSERT INTO fx_questao_topico (questao_id, area_id, area, topico_id, topico, pri
 (206, 2, 'Segurança da Informação', 21, 'Criptografia', true, 0.84),
 (207, 4, 'Governança e Legislação', 41, 'LGPD', true, 0.97),
 (415, 1, 'Banco de Dados', 13, 'SGBD', true, NULL),
-(520, 5, 'Engenharia de Software', 51, 'Princípios de Projeto', true, 0.9);
+(520, 5, 'Engenharia de Software', 51, 'Princípios de Projeto', true, 0.9),
+(601, 1, 'Banco de Dados', 11, 'Normalização', true, 0.9),
+(602, 1, 'Banco de Dados', 11, 'Normalização', true, 0.92),
+(604, 5, 'Engenharia de Software', 52, 'Padrões de Projeto', true, 0.8),
+(605, 5, 'Engenharia de Software', 52, 'Padrões de Projeto', true, 0.82),
+(606, 5, 'Engenharia de Software', 53, 'UML', true, 0.9),
+(607, 5, 'Engenharia de Software', 53, 'UML', true, 0.9);
 
 INSERT INTO fx_questao_tecnologia (questao_id, tecnologia_id, tecnologia, categoria, confianca) VALUES
 (415, 1, 'PostgreSQL', 'tecnologia', 0.99),

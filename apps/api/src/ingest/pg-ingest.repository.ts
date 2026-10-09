@@ -4,6 +4,7 @@ import pg from 'pg';
 import {
   IngestRepository,
   type AlternativaIngest,
+  type CopiaIngest,
   type FiltroQuestoes,
   type FiltrosIngest,
   type QuestaoEstudo,
@@ -22,12 +23,18 @@ const COLUNAS_ESTUDO = `
   e.gabarito_versao AS "gabaritoVersao", e.tipo_cobranca AS "tipoCobranca",
   e.tipo_cobranca_confianca AS "tipoCobrancaConfianca", e.nivel_cognitivo AS "nivelCognitivo",
   e.nivel_cognitivo_confianca AS "nivelCognitivoConfianca",
-  e.norma_referencia AS "normaReferencia", e.classificada, e.tem_recorte AS "temRecorte"`;
+  e.norma_referencia AS "normaReferencia", e.classificada, e.tem_recorte AS "temRecorte",
+  e.chave_conteudo AS "chaveConteudo"`;
 
 const COLUNAS_GABARITO = `
   e.questao_id AS "questaoId", e.banca, e.orgao, e.ano, e.numero, e.tipo_item AS "tipoItem",
   e.enunciado, e.gabarito_status AS "gabaritoStatus", e.resposta_correta AS "respostaCorreta",
   e.gabarito_versao AS "gabaritoVersao"`;
+
+// Identidade do conteúdo: chave não nula agrupa cópias; chave NULL é sempre única (por id).
+const GRUPO = `COALESCE('c:' || e.chave_conteudo, 'q:' || e.questao_id)`;
+// Melhor cópia primeiro: gabarito ok, ano mais recente (nulo por último), menor id.
+const MELHOR_COPIA = `(e.gabarito_status = 'ok') DESC, e.ano DESC NULLS LAST, e.questao_id`;
 
 /**
  * Leitura do Postgres do provas-ti-ingest pelas views v_questao_* com o role app_leitor.
@@ -87,13 +94,18 @@ export class PgIngestRepository extends IngestRepository implements OnModuleDest
       );
     }
     const where = condicoes.length ? `WHERE ${condicoes.join(' AND ')}` : '';
+    // Primeiro filtra as cópias, depois escolhe uma por conteúdo entre as que atendem.
+    const candidatas = `
+      SELECT DISTINCT ON (${GRUPO}) ${COLUNAS_ESTUDO}
+        FROM v_questao_estudo e ${where}
+       ORDER BY ${GRUPO}, ${MELHOR_COPIA}`;
     const [contagem] = await this.consultar<{ total: number }>(
-      `SELECT count(*)::int AS total FROM v_questao_estudo e ${where}`,
+      `SELECT count(*)::int AS total FROM (${candidatas}) c`,
       params,
     );
     const questoes = await this.consultar<QuestaoEstudo>(
-      `SELECT ${COLUNAS_ESTUDO} FROM v_questao_estudo e ${where}
-        ORDER BY e.ano DESC NULLS LAST, e.banca, e.prova_id, e.numero, e.questao_id
+      `SELECT * FROM (${candidatas}) c
+        ORDER BY c."ano" DESC NULLS LAST, c."banca", c."provaId", c."numero", c."questaoId"
         LIMIT ${param(pagina.limite)} OFFSET ${param(pagina.offset)}`,
       params,
     );
@@ -106,6 +118,37 @@ export class PgIngestRepository extends IngestRepository implements OnModuleDest
       [questaoId],
     );
     return questao ?? null;
+  }
+
+  async resolverRepresentantes(questaoIds: number[]) {
+    const resolvidos = new Map<number, QuestaoGabarito>();
+    if (!questaoIds.length) return resolvidos;
+    // `r.chave_conteudo = a.chave_conteudo` é nulo quando a chave é NULL: sobra só a própria questão.
+    const linhas = await this.consultar<QuestaoGabarito & { origemId: number }>(
+      `SELECT a.questao_id AS "origemId", r."questaoId", r.banca, r.orgao, r.ano, r.numero,
+              r."tipoItem", r.enunciado, r."gabaritoStatus", r."respostaCorreta", r."gabaritoVersao"
+         FROM v_questao_estudo a
+        CROSS JOIN LATERAL (
+          SELECT ${COLUNAS_GABARITO} FROM v_questao_estudo e
+           WHERE e.questao_id = a.questao_id OR e.chave_conteudo = a.chave_conteudo
+           ORDER BY ${MELHOR_COPIA} LIMIT 1
+        ) r
+        WHERE a.questao_id = ANY($1::int[])`,
+      [questaoIds],
+    );
+    for (const { origemId, ...gabarito } of linhas) resolvidos.set(origemId, gabarito);
+    return resolvidos;
+  }
+
+  async listarCopias(questaoId: number) {
+    return this.consultar<CopiaIngest>(
+      `SELECT c.questao_id AS "questaoId", c.banca, c.orgao, c.ano
+         FROM v_questao_estudo e
+         JOIN v_questao_estudo c ON c.chave_conteudo = e.chave_conteudo AND c.questao_id <> e.questao_id
+        WHERE e.questao_id = $1
+        ORDER BY c.ano DESC NULLS LAST, c.banca, c.orgao, c.questao_id`,
+      [questaoId],
+    );
   }
 
   async buscarGabaritos(questaoIds: number[]) {

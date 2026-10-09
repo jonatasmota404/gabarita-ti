@@ -25,6 +25,8 @@ export interface QuestaoEstudo {
   normaReferencia: string | null;
   classificada: boolean;
   temRecorte: boolean;
+  /** Hash opaco do conteúdo (v1.1). Mesma chave não nula = mesma questão em outra prova. */
+  chaveConteudo: string | null;
 }
 
 /** Só o necessário para avaliar uma resposta e listar no histórico. */
@@ -41,6 +43,14 @@ export type QuestaoGabarito = Pick<
   | 'respostaCorreta'
   | 'gabaritoVersao'
 >;
+
+/** Onde mais um conteúdo apareceu: uma cópia (mesma chave) em outra prova. */
+export interface CopiaIngest {
+  questaoId: number;
+  banca: string;
+  orgao: string;
+  ano: number | null;
+}
 
 export interface AlternativaIngest {
   questaoId: number;
@@ -94,12 +104,27 @@ export interface FiltrosIngest {
 }
 
 export abstract class IngestRepository {
+  /**
+   * Cada conteúdo distinto aparece uma vez (e `total` conta conteúdos). Com filtros, o
+   * conteúdo entra se QUALQUER cópia atender, e a cópia devolvida é a melhor entre as que
+   * atendem: gabarito ok, ano mais recente, menor id.
+   */
   abstract listarQuestoes(
     filtro: FiltroQuestoes,
     pagina: { offset: number; limite: number },
   ): Promise<{ questoes: QuestaoEstudo[]; total: number }>;
 
   abstract buscarQuestao(questaoId: number): Promise<QuestaoEstudo | null>;
+
+  /**
+   * Para cada id, o gabarito do representante do conteúdo (gabarito ok, depois ano mais
+   * recente, depois menor id). Chave nula = o próprio id. Ids inexistentes não voltam.
+   * A chave é derivada da view na hora: nunca persista o resultado como identificador.
+   */
+  abstract resolverRepresentantes(questaoIds: number[]): Promise<Map<number, QuestaoGabarito>>;
+
+  /** Demais cópias do mesmo conteúdo (mesma chave não nula), sem a própria questão. */
+  abstract listarCopias(questaoId: number): Promise<CopiaIngest[]>;
 
   /** Ids inexistentes (ex.: órfãos de uma reextração) simplesmente não voltam. */
   abstract buscarGabaritos(questaoIds: number[]): Promise<QuestaoGabarito[]>;

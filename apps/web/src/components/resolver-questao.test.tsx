@@ -24,6 +24,25 @@ describe('ResolverQuestao', () => {
     expect(screen.getByRole('radio', { name: /Alternativa C/ })).toBeDisabled();
   });
 
+  it('mostra de forma discreta onde mais o conteúdo já caiu', () => {
+    const { rerender } = render(<ResolverQuestao questao={questaoME()} />);
+    expect(screen.queryByTestId('tambem-caiu-em')).not.toBeInTheDocument();
+
+    rerender(
+      <ResolverQuestao
+        questao={questaoME({
+          tambemCaiuEm: [
+            { questaoId: 601, banca: 'fgv', orgao: 'TCE-RJ', ano: 2021 },
+            { questaoId: 700, banca: 'cebraspe', orgao: 'TCU', ano: null },
+          ],
+        })}
+      />,
+    );
+    const bloco = screen.getByTestId('tambem-caiu-em');
+    expect(bloco).toHaveTextContent('Também caiu em: FGV 2021 (TCE-RJ), Cebraspe (TCU)');
+    expect(screen.getByRole('link', { name: /FGV 2021/ })).toHaveAttribute('href', '/questoes/601');
+  });
+
   it('certo/errado: mostra Certo e Errado (sem alternativas) e traduz o gabarito', async () => {
     const responder = vi.fn().mockResolvedValue(
       resultado({

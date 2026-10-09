@@ -65,6 +65,7 @@ describe('calcularDesempenho', () => {
       erros: 1,
       taxaAcerto: 2 / 3,
       respondidas: 5,
+      conteudosRespondidos: 4,
       naoPontuadas: 1,
       deQuestoesRemovidas: 1,
     });
@@ -86,6 +87,26 @@ describe('calcularDesempenho', () => {
     expect(area10.topicos.find((t) => t.topicoId === 100)).toMatchObject({ acertos: 1, erros: 1 });
     expect(area10.topicos.find((t) => t.topicoId === 101)).toMatchObject({ acertos: 1, erros: 0 });
     expect(d.porArea.find((a) => a.areaId === 20)).toMatchObject({ acertos: 1, erros: 0 });
+  });
+
+  it('conta cada tentativa, mas o conteúdo respondido uma vez só', () => {
+    // as respostas já chegam atribuídas ao representante (id 1) mesmo vindas de cópias
+    const d = calcularDesempenho(
+      [
+        { questaoId: 1, resposta: 'A' },
+        { questaoId: 1, resposta: 'A' },
+        { questaoId: 1, resposta: 'B' },
+        { questaoId: 2, resposta: 'B' },
+      ],
+      gabaritos,
+      topicos,
+    );
+    expect(d.geral).toMatchObject({
+      acertos: 3,
+      erros: 1,
+      respondidas: 4,
+      conteudosRespondidos: 2,
+    });
   });
 
   it('sem respostas: taxa nula, sem quebrar', () => {
